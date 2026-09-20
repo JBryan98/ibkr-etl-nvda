@@ -56,22 +56,24 @@ jobs:
 
       - name: Wait for IB Gateway
         run: |
-          echo "Esperando a que IB Gateway esté disponible..."
+          echo "Esperando a que IB Gateway termine de iniciar..."
 
-          for i in {1..30}; do
+          for i in {1..12}; do
 
             if nc -z 127.0.0.1 4002; then
               echo "Puerto 4002 disponible."
+              echo "Esperando 20 segundos adicionales para que IB Gateway complete el login..."
+              sleep 20
               exit 0
             fi
 
-            echo "Gateway todavía no está disponible..."
-            sleep 10
+            echo "Gateway todavía no está disponible... intento $i/12"
+            sleep 5
 
           done
 
           echo "IB Gateway no estuvo disponible."
-          docker compose logs
+          docker compose logs --no-color
           exit 1
 
       - name: Run OHLCV ETL
