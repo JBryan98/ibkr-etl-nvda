@@ -1,0 +1,89 @@
+name: NVDA OHLCV ETL
+
+on:
+  schedule:
+    # 6:00 PM Perú (UTC-5) = 11:00 PM UTC
+    - cron: "0 22 * * 1-5"
+
+  workflow_dispatch:
+
+jobs:
+
+  ohlcv-etl:
+
+    runs-on: ubuntu-latest
+
+    env:
+      TWS_USERID: ${{ secrets.TWS_USERID }}
+      TWS_PASSWORD: ${{ secrets.TWS_PASSWORD }}
+      TRADING_MODE: ${{ secrets.TRADING_MODE }}
+      READ_ONLY_API: ${{ secrets.READ_ONLY_API }}
+      TWOFA_TIMEOUT_ACTION: ${{ secrets.TWOFA_TIMEOUT_ACTION }}
+      RELOGIN_AFTER_TWOFA_TIMEOUT: ${{ secrets.RELOGIN_AFTER_TWOFA_TIMEOUT }}
+      TIME_ZONE: ${{ secrets.TIME_ZONE }}
+      EXISTING_SESSION_DETECTED_ACTION: ${{ secrets.EXISTING_SESSION_DETECTED_ACTION }}
+
+      DB_HOST: ${{ secrets.DB_HOST }}
+      DB_PORT: ${{ secrets.DB_PORT }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      DB_DRIVER: ${{ secrets.DB_DRIVER }}
+
+    steps:
+
+      - name: Checkout del repositorio
+        uses: actions/checkout@v7
+
+      - name: Configurar Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Start IB Gateway
+        run: |
+          docker compose up -d
+
+      - name: Show Gateway containers
+        run: |
+          docker compose ps
+
+      - name: Wait for IB Gateway
+        run: |
+          echo "Esperando a que IB Gateway esté disponible..."
+
+          for i in {1..30}; do
+
+            if nc -z 127.0.0.1 4002; then
+              echo "Puerto 4002 disponible."
+              exit 0
+            fi
+
+            echo "Gateway todavía no está disponible..."
+            sleep 10
+
+          done
+
+          echo "IB Gateway no estuvo disponible."
+          docker compose logs
+          exit 1
+
+      - name: Run OHLCV ETL
+        run: |
+          python main.py
+
+      - name: Show Gateway logs
+        if: always()
+        run: |
+          docker compose logs --no-color
+
+      - name: Stop IB Gateway
+        if: always()
+        run: |
+          docker compose down
